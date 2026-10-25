@@ -1,0 +1,66 @@
+name: Build Ghostty (PR #13745 - macOS)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-macos:
+    name: Build macOS PR #13745
+    runs-on: macos-latest
+
+    steps:
+      # 1. Checkout Ghostty PR #13745 recursively with submodules
+      - name: Checkout Ghostty PR #13745
+        uses: actions/checkout@v4
+        with:
+          repository: ghostty-org/ghostty
+          ref: refs/pull/13745/head
+          submodules: recursive
+          fetch-depth: 0
+
+      # 2. Set up Zig compiler
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+
+      # 3. Install dependencies & export gettext binaries to PATH
+      - name: Install Build Dependencies
+        run: |
+          brew install gettext pkg-config
+          echo "$(brew --prefix gettext)/bin" >> $GITHUB_PATH
+
+      # 4. Compile Ghostty macOS application
+      - name: Build Ghostty Bundle
+        run: zig build -Doptimize=ReleaseFast
+
+      # 5. Perform ad-hoc code signing
+      - name: Ad-hoc Sign App Bundle
+        run: |
+          APP_PATH=$(find zig-out -name "Ghostty.app" -type d | head -n 1)
+          if [ -n "$APP_PATH" ]; then
+            echo "Ad-hoc signing: $APP_PATH"
+            codesign --force --deep --sign - "$APP_PATH"
+          else
+            echo "Error: Ghostty.app not found under zig-out"
+            exit 1
+          fi
+
+      # 6. Compress App Bundle for Artifact Storage
+      - name: Compress App Bundle
+        run: |
+          cd zig-out
+          if [ -d "Applications/Ghostty.app" ]; then
+            zip -r Ghostty-PR13745-macOS.zip Applications/Ghostty.app
+          else
+            zip -r Ghostty-PR13745-macOS.zip Ghostty.app
+          fi
+
+      # 7. Upload zipped artifact
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ghostty-PR13745-macOS
+          path: zig-out/Ghostty-PR13745-macOS.zip
