@@ -11,7 +11,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      # 1. Checkout Ghostty PR #13745 recursively with submodules
+      # 1. Checkout Ghostty PR #13745
       - name: Checkout Ghostty PR #13745
         uses: actions/checkout@v4
         with:
@@ -20,7 +20,7 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      # 2. Extract required Zig version from PR's build.zig.zon
+      # 2. Automatically detect which Zig version this PR branch needs
       - name: Detect Zig Version
         id: zig-version
         run: |
@@ -28,24 +28,24 @@ jobs:
           echo "Detected Zig version: $ZIG_VER"
           echo "version=$ZIG_VER" >> $GITHUB_OUTPUT
 
-      # 3. Set up the exact required Zig compiler
+      # 3. Setup the matching Zig compiler
       - name: Setup Zig
         uses: mlugg/setup-zig@v1
         with:
           version: ${{ steps.zig-version.outputs.version }}
 
-      # 4. Install dependencies & export gettext binaries to PATH
+      # 4. Install dependencies
       - name: Install Build Dependencies
         run: |
           brew install gettext pkg-config
           echo "$(brew --prefix gettext)/bin" >> $GITHUB_PATH
 
-      # 5. Compile Ghostty macOS application
+      # 5. Build Ghostty
       - name: Build Ghostty Bundle
         run: zig build -Doptimize=ReleaseFast
 
-      # 6. Locate, Ad-hoc Sign, and Compress App Bundle
-      - name: Sign & Package App Bundle
+      # 6. Locate, ad-hoc sign, and package with ditto (preserves macOS bundle symlinks)
+      - name: Sign & Compress Bundle
         run: |
           APP_PATH=$(find zig-out -name "Ghostty.app" -type d | head -n 1)
           if [ -z "$APP_PATH" ]; then
@@ -56,8 +56,7 @@ jobs:
           echo "Signing: $APP_PATH"
           codesign --force --deep --sign - "$APP_PATH"
 
-          # Use ditto to preserve macOS symlinks, permissions, and resource forks
-          echo "Creating zip archive..."
+          echo "Creating zip archive with ditto..."
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" Ghostty-PR13745-macOS.zip
 
       # 7. Upload zipped artifact
