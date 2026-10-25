@@ -24,7 +24,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v1
         with:
-          version: 0.13.0
+          version: 0.17.0
 
       # 3. Install dependencies & export gettext binaries to PATH
       - name: Install Build Dependencies
