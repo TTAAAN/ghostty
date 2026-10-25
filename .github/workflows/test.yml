@@ -11,7 +11,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      # 1. Checkout Ghostty PR #13745
+      # 1. Checkout Ghostty PR #13745 recursively with submodules
       - name: Checkout Ghostty PR #13745
         uses: actions/checkout@v4
         with:
@@ -20,32 +20,24 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      # 2. Automatically detect which Zig version this PR branch needs
-      - name: Detect Zig Version
-        id: zig-version
-        run: |
-          ZIG_VER=$(sed -n -E 's/^[[:space:]]*\.?minimum_zig_version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' build.zig.zon)
-          echo "Detected Zig version: $ZIG_VER"
-          echo "version=$ZIG_VER" >> $GITHUB_OUTPUT
-
-      # 3. Setup the matching Zig compiler
+      # 2. Set up Zig compiler (hardcoded to 0.16.0)
       - name: Setup Zig
         uses: mlugg/setup-zig@v1
         with:
-          version: ${{ steps.zig-version.outputs.version }}
+          version: 0.16.0
 
-      # 4. Install dependencies
+      # 3. Install dependencies & export gettext binaries to PATH
       - name: Install Build Dependencies
         run: |
           brew install gettext pkg-config
           echo "$(brew --prefix gettext)/bin" >> $GITHUB_PATH
 
-      # 5. Build Ghostty
+      # 4. Compile Ghostty macOS application
       - name: Build Ghostty Bundle
         run: zig build -Doptimize=ReleaseFast
 
-      # 6. Locate, ad-hoc sign, and package with ditto (preserves macOS bundle symlinks)
-      - name: Sign & Compress Bundle
+      # 5. Locate, Ad-hoc Sign, and Compress App Bundle
+      - name: Sign & Package App Bundle
         run: |
           APP_PATH=$(find zig-out -name "Ghostty.app" -type d | head -n 1)
           if [ -z "$APP_PATH" ]; then
@@ -56,10 +48,11 @@ jobs:
           echo "Signing: $APP_PATH"
           codesign --force --deep --sign - "$APP_PATH"
 
-          echo "Creating zip archive with ditto..."
+          # Use ditto to keep macOS internal symlinks intact
+          echo "Packaging: $APP_PATH"
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" Ghostty-PR13745-macOS.zip
 
-      # 7. Upload zipped artifact
+      # 6. Upload zipped artifact
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
